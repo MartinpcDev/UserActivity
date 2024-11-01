@@ -1,6 +1,4 @@
-import java.io.BufferedReader;
 import java.io.IOException;
-import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.util.Scanner;
@@ -9,81 +7,58 @@ public class MainApplication {
 
   public static void main(String[] args) {
     Scanner consola = new Scanner(System.in);
-    System.out.print("Ingrese un usuario: ");
+    System.out.print("Ingrese el nombre: ");
     String username = consola.nextLine();
+    String apiUrl = "https://api.github.com/users/" + username + "/events";
+
     try {
-      int totalCommits = 0;
+      // Realiza la solicitud a la API de GitHub
+      URL url = new URL(apiUrl);
+      HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+      conn.setRequestMethod("GET");
+      conn.setRequestProperty("Accept", "application/json");
 
-      // Obtener todos los repositorios del usuario
-      String reposUrl = "https://api.github.com/users/" + username + "/repos";
-      String reposResponse = sendGetRequest(reposUrl);
+      int responseCode = conn.getResponseCode();
 
-      // Parsear manualmente los repositorios (Esto es un ejemplo básico y limitado)
-      String[] repoNames = extractRepoNames(reposResponse);
-
-      // Iterar sobre los repositorios y contar los commits
-      for (String repoName : repoNames) {
-        int repoCommits = countCommits(username, repoName);
-        totalCommits += repoCommits;
+      if (responseCode == 404) {
+        System.out.println("Usuario no encontrado.");
+        return;
+      } else if (responseCode != 200) {
+        System.out.println(
+            "Error al obtener los datos de GitHub. Código de respuesta: " + responseCode);
+        return;
       }
 
-      System.out.println("Total de commits realizados por " + username + ": " + totalCommits);
-    } catch (Exception e) {
-      System.out.println(e.getMessage());
-    }
-
-  }
-
-  private static String[] extractRepoNames(String jsonResponse) {
-    String[] repos = jsonResponse.split("\"full_name\":\"");
-    String[] repoNames = new String[repos.length - 1];
-    for (int i = 1; i < repos.length; i++) {
-      repoNames[i - 1] = repos[i].split("\",")[0].split("/")[1];
-    }
-    return repoNames;
-  }
-
-  private static String sendGetRequest(String url) throws IOException {
-    URL obj = new URL(url);
-    HttpURLConnection connection = (HttpURLConnection) obj.openConnection();
-    connection.setRequestMethod("GET");
-
-    BufferedReader in = new BufferedReader(new InputStreamReader(connection.getInputStream()));
-    StringBuilder response = new StringBuilder();
-    String inputLine = in.readLine();
-
-    while (inputLine != null) {
-      response.append(inputLine);
-      inputLine = in.readLine();
-    }
-    in.close();
-
-    return response.toString();
-  }
-
-
-  private static int countCommits(String username, String repoName) throws Exception {
-    int totalCommits = 0;
-    int page = 1;
-    int commitsPerPage = 100;
-
-    while (true) {
-      String commitsUrl =
-          "https://api.github.com/repos/" + username + "/" + repoName + "/commits?per_page="
-              + commitsPerPage + "&page=" + page;
-      String commitsResponse = sendGetRequest(commitsUrl);
-
-      if (commitsResponse.equals("[]")) {
-        break;
+      // Leer y analizar la respuesta JSON
+      Scanner scanner = new Scanner(url.openStream());
+      StringBuilder jsonResponse = new StringBuilder();
+      while (scanner.hasNext()) {
+        jsonResponse.append(scanner.nextLine());
       }
+      scanner.close();
 
-      String[] commits = commitsResponse.split("\"sha\":");
-      totalCommits += (commits.length - 1);
+      // Procesa el JSON y muestra la actividad
+      displayUserActivity(jsonResponse.toString());
 
-      page++;
+    } catch (IOException e) {
+      System.out.println("Ocurrió un error al conectar con la API de GitHub: " + e.getMessage());
+    }
+  }
+
+  private static void displayUserActivity(String jsonResponse) {
+    // Este es un análisis simple; ajusta según las necesidades de tu JSON
+    String[] events = jsonResponse.split("},\\{");
+
+    for (String event : events) {
+      if (event.contains("\"type\":\"PushEvent\"")) {
+        System.out.println("Pushed commits a un repositorio");
+      } else if (event.contains("\"type\":\"IssuesEvent\"")) {
+        System.out.println("Abrió un nuevo issue en un repositorio");
+      } else if (event.contains("\"type\":\"WatchEvent\"")) {
+        System.out.println("Starred un repositorio");
+      }
+      // Puedes agregar más condiciones para otros eventos
     }
 
-    System.out.println("Repositorio: " + repoName + " - Commits: " + totalCommits);
-    return totalCommits;
   }
 }
